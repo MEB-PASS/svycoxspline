@@ -1,0 +1,27 @@
+# R session files
+.Rhistory
+.RData
+.Ruserdata
+
+# RStudio
+.Rproj.user/
+
+# R build/check output
+/*.tar.gz
+/*.Rcheck/
+
+# R Markdown / knitr temporary files
+*_cache/
+*_files/
+
+# Generated package artifacts
+Meta/
+doc/
+
+# macOS
+.DS_Store
+
+# Temporary/editor files
+*~
+*.swp
+*.swo

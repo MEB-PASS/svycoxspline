@@ -1,0 +1,23 @@
+Package: svyspline
+Type: Package
+Title: Survey-Weighted Spline Models for Survival Analysis
+Version: 0.1.0
+Authors@R: 
+    person("Alaina", "Shreves", role = c("aut", "cre"))
+Description: Provides functions for fitting and visualizing spline models
+    for survival outcomes in complex survey data. Includes tools for
+    selecting survey-weighted knots and reference values, estimating
+    hazard ratios and confidence intervals, and testing for nonlinearity.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    dplyr,
+    splines,
+    survival,
+    survey,
+    tibble
+Suggests:
+    ggplot2,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
