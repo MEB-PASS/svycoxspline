@@ -12,42 +12,39 @@ vignette: >
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 9,
-  fig.height = 6
+  fig.width = 8,
+  fig.height = 5
 )
 ```
 
 # Introduction
 
-`svyspline` provides a  workflow for fitting and visualizing spline associations between continuous exposures and survival outcomes in complex survey data.
+`svyspline` provides a workflow for fitting and visualizing spline associations between continuous exposures and survival outcomes in complex survey data.
 
-The `fit_svyspline()` function takes an existing `survey` design object and:
+The main function, `fit_svyspline()`, takes an existing `survey` design object and:
 
--   optionally trims the exposure using survey-weighted quantiles
--   calculates survey-weighted spline knots
--   calculates a survey-weighted reference value
--   fits a survey-weighted Cox proportional hazards model with spline terms
--   generates predicted hazard ratios (HRs) and 95% confidence intervals across the exposure range
--   fits a corresponding linear Cox model
--   tests for evidence of departure from linearity
+- optionally trims the exposure using survey-weighted quantiles
+- calculates survey-weighted spline knots and a reference value
+- fits a survey-weighted Cox model with spline terms
+- generates predicted hazard ratios (HRs) and 95% confidence intervals
+- fits a corresponding linear Cox model
+- tests for evidence of departure from linearity
 
 The basic workflow is:
 
-``` text
+```text
 Create survey design
-        ↓
+       ↓
 Apply analytic restrictions
-        ↓
+       ↓
 Fit spline model with fit_svyspline()
-        ↓
-Examine model results and predictions
-        ↓
+       ↓
+Examine predictions and diagnostics
+       ↓
 Visualize the association
 ```
 
-This vignette demonstrates the workflow using BMI and all-cause mortality in NHANES 2011-2014.
-
-NHANES data are publicly available from the [National Center for Health Statistics](https://www.cdc.gov/nchs/nhanes/).
+This vignette uses BMI and all-cause mortality in NHANES 2011-2014.
 
 # Load packages
 
@@ -59,20 +56,18 @@ library(ggplot2)
 
 # Prepare the data
 
-The example uses NHANES 2011-2014 data prepared for demonstrating the `svyspline` workflow.
+The example data are included with the package.
 
 ```{r}
 dat <- data.table::fread(
-  "../data/nhanes_spline_data.csv",
+  system.file("data", "nhanes_spline_data.csv", package = "svyspline"),
   data.table = FALSE
 )
 ```
 
-The example dataset contains the survey design variables (`sdmvpsu`, `sdmvstra`, and `mec4yr`), BMI as the exposure, follow-up time and mortality status for the survival outcome, and age and sex as covariates.
+The data include the NHANES survey design variables (`sdmvpsu`, `sdmvstra`, and `mec4yr`), BMI, follow-up time, mortality status, age, and sex.
 
-Mortality follow-up is obtained from the National Center for Health Statistics (NCHS) Linked Mortality Files, which provide mortality linkage for eligible adult NHANES participants aged 18 years or older.
-
-The available variables can be inspected using:
+You can inspect the available variables with:
 
 ```{r}
 names(dat)
@@ -81,7 +76,7 @@ head(dat)
 
 # Create the survey design
 
-NHANES is a complex survey and should be represented using the appropriate primary sampling units, strata, and survey weights.
+NHANES is a complex survey, so the analysis should use the appropriate primary sampling units, strata, and survey weights.
 
 ```{r}
 NHANES_all <- svydesign(
@@ -93,9 +88,7 @@ NHANES_all <- svydesign(
 )
 ```
 
-For this example, the analysis is restricted to participants aged 40 years or older with BMI values between 10 and 60 kg/m².
-
-Analytic restrictions are applied **after** constructing the survey design object. Subsetting the survey design rather than the underlying data preserves the survey design information and weights needed for appropriate variance estimation in the restricted analytic population.
+For this example, restrict the analysis to participants aged 40 years or older with BMI between 10 and 60 kg/m$^2$.
 
 ```{r}
 NHANES_qc <- subset(
@@ -104,29 +97,13 @@ NHANES_qc <- subset(
 )
 ```
 
-> **Important:** Define the survey design and assign survey weights before applying analytic sample restrictions or subgroup restrictions. Use `survey::subset()` to restrict the survey design.
+**Important:** Create the survey design and assign survey weights before applying analytic or subgroup restrictions. Use `survey::subset()` to restrict the survey design so that the survey design information and weights are retained.
 
 # Fit a spline model
 
-The following example fits a spline model for the association between BMI and all-cause mortality, adjusting for age and sex.
+A basic model uses BMI as the exposure, mortality as the event, and follow-up time in months, adjusting for age and sex.
 
 ```{r}
-res_bmi <- fit_svyspline(
-  design = NHANES_qc,
-  exposure_var = "bmi",
-  time_var = "fu_months_int",
-  event_var = "mortality",
-  covariates = NULL
-)
-```
-
-The default settings can be modified to control exposure trimming, spline knot placement, the reference value, and the prediction grid.
-
-## Customize the spline
-
-A fully specified model can be fitted using:
-
-```{r, eval = FALSE}
 res_bmi <- fit_svyspline(
   design = NHANES_qc,
   exposure_var = "bmi",
@@ -141,123 +118,34 @@ res_bmi <- fit_svyspline(
 )
 ```
 
-The main arguments are summarized below.
+The main arguments are:
 
 | Argument | Purpose | Example |
-|------------------------|------------------------|------------------------|
+|:--|:--|:--|
 | `design` | Existing `survey` design object | `NHANES_qc` |
 | `exposure_var` | Continuous exposure modeled with a spline | `"bmi"` |
 | `time_var` | Follow-up time variable | `"fu_months_int"` |
 | `event_var` | Event indicator variable | `"mortality"` |
-| `covariates` | Covariates included in the Cox model | `c("age", "factor(sex)")` |
-| `trim_probs` | Percentiles defining the exposure range retained for modeling | `c(0.01, 0.99)` or `NULL` |
-| `knot_probs` | Percentiles used to locate the spline knots | `c(0.05, 0.50, 0.95)` |
-| `ref_prob` | Percentile used to define the HR = 1 reference | `0.10` |
-| `grid_by` | Increment between exposure values used for predictions | `1` |
-| `round_to` | Increment used to round the reference value and prediction limits | `1` |
+| `covariates` | Covariates in the Cox model | `c("age", "factor(sex)")` |
+| `trim_probs` | Percentiles defining the exposure range used for modeling | `c(0.01, 0.99)` or `NULL` |
+| `knot_probs` | Percentiles used to place spline knots | `c(0.05, 0.50, 0.95)` |
+| `ref_prob` | Percentile used for the HR = 1 reference | `0.10` |
+| `grid_by` | Spacing of exposure values used for prediction | `1` |
+| `round_to` | Increment used to round the reference and prediction limits | `1` |
 
-## Exposure trimming
+### Choosing the spline settings
 
-`trim_probs` defines the exposure range used for model fitting and prediction.
+`trim_probs` defines the exposure range used for model fitting and prediction. For example, `c(0.01, 0.99)` uses the survey-weighted 1st and 99th percentiles. Set `trim_probs = NULL` to retain the full observed exposure range.
 
-For example:
+`knot_probs` defines the survey-weighted percentiles used to place spline knots. More probabilities can be supplied when additional knots are appropriate. Sparse exposure distributions can produce unstable or non-unique knots.
 
-``` r
-trim_probs = c(0.01, 0.99)
-```
+`ref_prob` defines the exposure percentile used as the HR = 1 reference. For example, `ref_prob = 0.10` uses the survey-weighted 10th percentile as the reference.
 
-uses the survey-weighted 1st and 99th percentiles to define the lower and upper exposure limits.
-
-Set:
-
-``` r
-trim_probs = NULL
-```
-
-to retain the full observed exposure range.
-
-For example:
-
-```{r, eval = FALSE}
-res_no_trim <- fit_svyspline(
-  design = NHANES_qc,
-  exposure_var = "bmi",
-  time_var = "fu_months_int",
-  event_var = "mortality",
-  covariates = c("age", "factor(sex)"),
-  trim_probs = NULL
-)
-```
-
-When trimming is requested, the exposure limits are calculated using survey-weighted quantiles and the supplied survey design is then subsetted to that range.
-
-Importantly, this subsetting is performed on the existing survey design rather than on the underlying data. This preserves the survey design structure and weights.
-
-## Knot placement
-
-`knot_probs` defines the survey-weighted percentiles used to place spline knots.
-
-For example:
-
-``` r
-knot_probs = c(0.05, 0.50, 0.95)
-```
-
-places knots at the 5th, 50th, and 95th percentiles of the exposure distribution.
-
-Additional probabilities can be supplied to use more knots. For example:
-
-``` r
-knot_probs = c(0.05, 0.35, 0.65, 0.95)
-```
-
-would place four knots.
-
-The selected knot probabilities should be appropriate for the exposure distribution and the scientific question. Very sparse exposure distributions can result in unstable or non-unique knots.
-
-## Reference value
-
-`ref_prob` specifies the exposure percentile used to define the reference value for the hazard ratio.
-
-For example:
-
-``` r
-ref_prob = 0.10
-```
-
-uses the survey-weighted 10th percentile as the reference. Hazard ratios are therefore interpreted relative to this exposure value.
-
-The resulting reference value can be inspected using:
-
-```{r}
-res_bmi$ref_val
-```
-
-## Prediction grid
-
-`grid_by` specifies the spacing between exposure values at which predicted hazard ratios are calculated.
-
-For example:
-
-``` r
-grid_by = 1
-```
-
-generates predictions at 1-unit increments of the exposure.
-
-`round_to` controls the increment used to round the calculated reference value and the limits of the prediction grid.
-
-For example:
-
-``` r
-round_to = 1
-```
-
-rounds these values to the nearest whole exposure unit.
+`grid_by` controls the spacing of exposure values used for predictions, while `round_to` controls rounding of the reference value and prediction limits.
 
 # Examine the results
 
-The fitted object contains both model objects and derived quantities used for prediction and plotting.
+The fitted object contains the model fits, predictions, spline knots, reference value, and test for non-linearity.
 
 ```{r}
 names(res_bmi)
@@ -266,7 +154,7 @@ names(res_bmi)
 The main returned objects are:
 
 | Returned object | Description |
-|------------------------------------|------------------------------------|
+|:--|:--|
 | `fit_spline` | Survey-weighted Cox model containing spline terms |
 | `fit_linear` | Corresponding survey-weighted Cox model with a linear exposure term |
 | `pred_spline` | Predicted HRs and 95% CIs from the spline model |
@@ -277,215 +165,92 @@ The main returned objects are:
 | `nonlinearity_p_label` | Formatted p-value |
 | `design_clipped` | Survey design used for model fitting after optional trimming |
 
-The spline knots can be viewed with:
-
-```{r}
-res_bmi$knots
-```
-
-The reference value can be viewed with:
+Inspect the reference value, knots, non-linearity test, and predictions with:
 
 ```{r}
 res_bmi$ref_val
-```
-
-The p-value for non-linearity can be viewed with:
-
-```{r}
+res_bmi$knots
 res_bmi$nonlinearity_p
 res_bmi$nonlinearity_p_label
+head(res_bmi$pred_spline)
 ```
 
 The prediction data contain the exposure value, estimated HR, and lower and upper 95% confidence limits.
 
-```{r}
-head(res_bmi$pred_spline)
-```
+## Interpreting the test for non-linearity
+
+`fit_svyspline()` provides a p-value from a Wald test of the spline terms used to represent departure from linearity.
+
+A smaller p-value provides evidence that the association differs from a linear relationship. A larger p-value indicates insufficient evidence to reject linearity. Interpret this test alongside the estimated curve, confidence intervals, exposure distribution, and model assumptions rather than in isolation.
 
 # Plot the spline association
 
-The predicted hazard ratios can be visualized using `ggplot2`.
+The predicted hazard ratios can be visualized directly with `ggplot2`.
 
 ```{r}
-p_bmi <- ggplot(
-  res_bmi$pred_spline,
-  aes(x = bmi, y = HR)
-) +
-  geom_ribbon(
-    aes(ymin = lo, ymax = hi),
-    fill = "grey80",
-    alpha = 0.4
-  ) +
+ggplot(res_bmi$pred_spline, aes(x = bmi, y = HR)) +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
   geom_line(linewidth = 1) +
-  geom_hline(
-    yintercept = 1,
-    linetype = "dashed"
-  ) +
-  scale_y_continuous(
-    trans = "log2"
-  ) +
-  coord_cartesian(
-    ylim = c(0.5, 2)
-  ) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  scale_y_log10() +
   labs(
     title = "NHANES 2011-2014",
     subtitle = paste0(
       "Reference = ", res_bmi$ref_val,
-      "; Knots = (",
-      paste(round(res_bmi$knots, 1), collapse = ", "),
-      "); p-nonlinear = ",
-      res_bmi$nonlinearity_p_label
+      "; Knots = (", paste(round(res_bmi$knots, 1), collapse = ", "), ")",
+      "; p-nonlinear = ", res_bmi$nonlinearity_p_label
     ),
     x = "Body mass index (kg/m²)",
     y = "Adjusted hazard ratio (95% CI)"
   ) +
-  theme_minimal() +
-  theme(
-    axis.line = element_line(
-      color = "black"
-    ),
-    axis.text = element_text(
-      size = 12,
-      margin = margin(b = 10),
-      color = "black"
-    ),
-    axis.title = element_text(
-      size = 14,
-      margin = margin(t = 10),
-      color = "black"
-    ),
-    plot.title = element_text(
-      hjust = 0.5,
-      face = "bold",
-      size = 16
-    )
-  )
-
-print(p_bmi)
+  theme_minimal()
 ```
 
 # Compare spline and linear associations
 
-`fit_svyspline()` also fits a corresponding linear Cox model and returns predictions from that model.
-
-The spline and linear predictions can be combined for comparison:
+`fit_svyspline()` also fits a corresponding linear Cox model. The two prediction sets can be combined to compare the fitted associations.
 
 ```{r}
 pred_compare <- rbind(
-  transform(
-    res_bmi$pred_spline,
-    model = "Spline"
-  ),
-  transform(
-    res_bmi$pred_linear,
-    model = "Linear"
-  )
+  transform(res_bmi$pred_spline, model = "Spline"),
+  transform(res_bmi$pred_linear, model = "Linear")
 )
 ```
 
 ```{r}
-p_bmi_compare <- ggplot(
-  pred_compare,
-  aes(
-    x = bmi,
-    y = HR,
-    linetype = model
-  )
-) +
+ggplot(pred_compare, aes(x = bmi, y = HR, linetype = model)) +
   geom_ribbon(
     data = res_bmi$pred_spline,
-    aes(
-      x = bmi,
-      ymin = lo,
-      ymax = hi
-    ),
+    aes(x = bmi, ymin = lo, ymax = hi),
     inherit.aes = FALSE,
-    fill = "grey80",
-    alpha = 0.4
+    alpha = 0.2
   ) +
-  geom_line(
-    linewidth = 1
-  ) +
-  geom_hline(
-    yintercept = 1,
-    linetype = "dashed"
-  ) +
-  scale_y_continuous(
-    trans = "log2"
-  ) +
-  coord_cartesian(
-    ylim = c(0.5, 2)
-  ) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  scale_y_log10() +
   labs(
     title = "NHANES 2011-2014",
     subtitle = paste0(
       "Reference = ", res_bmi$ref_val,
-      "; Knots = (",
-      paste(round(res_bmi$knots, 1), collapse = ", "),
-      "); p-nonlinear = ",
-      res_bmi$nonlinearity_p_label
+      "; Knots = (", paste(round(res_bmi$knots, 1), collapse = ", "), ")",
+      "; p-nonlinear = ", res_bmi$nonlinearity_p_label
     ),
     x = "Body mass index (kg/m²)",
     y = "Adjusted hazard ratio (95% CI)",
     linetype = "Model"
   ) +
-  theme_minimal() +
-  theme(
-    axis.line = element_line(
-      color = "black"
-    ),
-    axis.text = element_text(
-      size = 12,
-      margin = margin(b = 10),
-      color = "black"
-    ),
-    axis.title = element_text(
-      size = 14,
-      margin = margin(t = 10),
-      color = "black"
-    ),
-    plot.title = element_text(
-      hjust = 0.5,
-      face = "bold",
-      size = 16
-    )
-  )
-
-print(p_bmi_compare)
+  theme_minimal()
 ```
 
-The spline model allows the association to vary across the exposure range, whereas the linear model assumes a linear association on the log-hazard scale.
-
-# Interpreting the test for non-linearity
-
-`fit_svyspline()` provides a p-value from a Wald test of the spline terms used to represent departure from linearity.
-
-A smaller p-value provides evidence that the association differs from a linear relationship. A larger p-value indicates that there is insufficient evidence to reject linearity.
-
-The p-value should be interpreted alongside the estimated association, confidence intervals, exposure distribution, and model assumptions rather than in isolation.
-
-The formatted p-value is available as:
-
-```{r}
-res_bmi$nonlinearity_p_label
-```
+The spline model allows the association to vary across the exposure range, while the linear model assumes a linear association on the log-hazard scale.
 
 # Sex-stratified analyses
 
-The function can also be applied separately within subgroups.
-
-For survey-weighted analyses, define the survey design and assign survey weights before applying subgroup restrictions. Subgroups should then be created by subsetting the existing survey design object.
+The same workflow can be applied separately within subgroups. First create subgroup survey designs from the existing survey design.
 
 ```{r}
-NHANES_qc_female <- subset(
-  NHANES_qc,
-  sex == "Female"
-)
-
-NHANES_qc_male <- subset(
-  NHANES_qc,
-  sex == "Male"
-)
+NHANES_qc_female <- subset(NHANES_qc, sex == "Female")
+NHANES_qc_male <- subset(NHANES_qc, sex == "Male")
 ```
 
 Because each model is fitted within a single sex stratum, sex is not included as a covariate.
@@ -503,9 +268,7 @@ res_female <- fit_svyspline(
   grid_by = 1,
   round_to = 1
 )
-```
 
-```{r}
 res_male <- fit_svyspline(
   design = NHANES_qc_male,
   exposure_var = "bmi",
@@ -520,106 +283,48 @@ res_male <- fit_svyspline(
 )
 ```
 
-The predictions from the two models can be combined for visualization.
+Predictions can then be combined for visualization.
 
 ```{r}
-pred_female <- res_female$pred_spline
-pred_female$sex <- "Female"
-
-pred_male <- res_male$pred_spline
-pred_male$sex <- "Male"
-
 pred_combined <- rbind(
-  pred_female,
-  pred_male
+  transform(res_female$pred_spline, sex = "Female"),
+  transform(res_male$pred_spline, sex = "Male")
 )
 ```
 
 ```{r}
-p_bmi_sex <- ggplot(
+ggplot(
   pred_combined,
-  aes(
-    x = bmi,
-    y = HR,
-    colour = sex,
-    fill = sex
-  )
+  aes(x = bmi, y = HR, colour = sex, fill = sex, linetype = sex)
 ) +
-  geom_ribbon(
-    aes(ymin = lo, ymax = hi),
-    alpha = 0.25,
-    colour = NA
-  ) +
-  geom_line(
-    aes(linetype = sex),
-    linewidth = 1
-  ) +
-  geom_hline(
-    yintercept = 1,
-    linetype = "dashed"
-  ) +
-  scale_y_continuous(
-    trans = "log2"
-  ) +
-  coord_cartesian(
-    ylim = c(0.5, 2.5)
-  ) +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, colour = NA) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  scale_y_log10() +
   labs(
     title = "NHANES 2011-2014",
-    subtitle = paste0(
-      "Female: Reference = ", res_female$ref_val,
-      "; Knots = (",
-      paste(round(res_female$knots, 1), collapse = ", "),
-      "); p-nonlinear = ", res_female$nonlinearity_p_label,
-      "\nMale: Reference = ", res_male$ref_val,
-      "; Knots = (",
-      paste(round(res_male$knots, 1), collapse = ", "),
-      "); p-nonlinear = ", res_male$nonlinearity_p_label
-    ),
     x = "Body mass index (kg/m²)",
     y = "Adjusted hazard ratio (95% CI)",
     colour = "Sex",
     fill = "Sex",
     linetype = "Sex"
   ) +
-  theme_minimal() +
-  theme(
-    axis.line = element_line(
-      color = "black"
-    ),
-    axis.text = element_text(
-      size = 12,
-      margin = margin(b = 10),
-      color = "black"
-    ),
-    axis.title = element_text(
-      size = 14,
-      margin = margin(t = 10),
-      color = "black"
-    ),
-    plot.title = element_text(
-      hjust = 0.5,
-      face = "bold",
-      size = 16
-    )
-  )
-
-print(p_bmi_sex)
+  theme_minimal()
 ```
 
-In subgroup analyses, exposure quantiles are calculated separately within each subgroup. As a result, knot locations and reference values may differ between subgroups.
+Exposure quantiles are calculated separately within each subgroup, so knot locations and reference values may differ between subgroups.
 
 # Important considerations
 
-`fit_svyspline()` assumes that the supplied object already represents the survey design and analytic population of interest. Survey weights, strata, and clusters should therefore be defined before calling the function.
+`fit_svyspline()` assumes that the supplied object already represents the survey design and analytic population of interest. Define survey weights, strata, and clusters before calling the function.
 
-Analytic sample restrictions and subgroup restrictions should be performed using `survey::subset()` after the survey design has been created.
+Apply analytic and subgroup restrictions using `survey::subset()` after creating the survey design.
 
-The choice of exposure trimming, knot locations, and reference value should be guided by the exposure distribution and scientific question. Sparse data near the exposure extremes can result in unstable estimates and wide confidence intervals.
+Choose exposure trimming, knot locations, and the reference value based on the exposure distribution and scientific question. Sparse data near the exposure extremes can produce unstable estimates and wide confidence intervals.
 
-The test for non-linearity should be interpreted together with the estimated curve, confidence intervals, and exposure distribution.
+Interpret the test for non-linearity together with the estimated curve, confidence intervals, exposure distribution, and model assumptions.
 
-Standard Cox proportional hazards model diagnostics, including assessment of the proportional hazards assumption, should be performed separately.
+Standard Cox proportional hazards diagnostics, including assessment of the proportional hazards assumption, should be performed separately.
 
 # Session information
 
