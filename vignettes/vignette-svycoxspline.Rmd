@@ -1,8 +1,8 @@
 ---
-title: "svycoxspline: Introduction and Examples"
+title: "Survey-Weighted Cox Proportional Hazards Models with Natural Cubic Splines"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Introduction to svycoxspline}
+  %\VignetteIndexEntry{Survey-Weighted Cox Proportional Hazards Models with Natural Cubic Splines}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -18,14 +18,14 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-`svycoxspline` provides a workflow for fitting and visualizing spline associations between continuous exposures and survival outcomes in complex survey data.
+`svycoxspline` provides a workflow for fitting and visualizing associations between continuous exposures and survival outcomes using survey-weighted Cox proportional hazards models with natural cubic splines.
 
 The main function, `fit_svycoxspline()`, takes an existing `survey` design object and:
 
-- optionally trims the exposure using survey-weighted quantiles
 - calculates survey-weighted spline knots and a reference value
 - fits a survey-weighted Cox model with spline terms
 - generates predicted hazard ratios (HRs) and 95% confidence intervals
+- optionally trims the exposure using survey-weighted quantiles
 - fits a corresponding linear Cox model
 - tests for evidence of departure from linearity
 
@@ -44,6 +44,8 @@ Visualize the association
 ```
 
 This vignette uses BMI and all-cause mortality in NHANES 2011-2014.
+
+Other complex surveys may use different sampling designs and design variables. Users should construct the survey design object using the appropriate specification for their data before passing it to fit_svycoxspline().
 
 # Load packages
 
@@ -100,7 +102,7 @@ NHANES_qc <- subset(
 
 # Fit a spline model
 
-A basic model uses BMI as the exposure, mortality as the event, and follow-up time in months, adjusting for age and sex.
+A model uses BMI as the exposure, mortality as the event, and follow-up time in months, adjusting for age and sex.
 
 ```{r}
 res_bmi <- fit_svycoxspline(
@@ -112,6 +114,7 @@ res_bmi <- fit_svycoxspline(
   trim_probs = c(0.01, 0.99),
   knot_probs = c(0.05, 0.50, 0.95),
   ref_prob = 0.10,
+  report_points = c(25, 30),
   grid_by = 1,
   round_to = 1
 )
@@ -119,18 +122,14 @@ res_bmi <- fit_svycoxspline(
 
 The main arguments are:
 
-| Argument | Purpose | Example |
-|:--|:--|:--|
-| `design` | Existing `survey` design object | `NHANES_qc` |
-| `exposure_var` | Continuous exposure modeled with a spline | `"bmi"` |
-| `time_var` | Follow-up time variable | `"fu_months_int"` |
-| `event_var` | Event indicator variable | `"mortality"` |
-| `covariates` | Covariates in the Cox model | `c("age", "factor(sex)")` |
-| `trim_probs` | Percentiles defining the exposure range used for modeling | `c(0.01, 0.99)` or `NULL` |
-| `knot_probs` | Percentiles used to place spline knots | `c(0.05, 0.50, 0.95)` |
-| `ref_prob` | Percentile used for the HR = 1 reference | `0.10` |
-| `grid_by` | Spacing of exposure values used for prediction | `1` |
-| `round_to` | Increment used to round the reference and prediction limits | `1` |
+| Argument | Purpose | Default | Example |
+|:-----------|:-----------------------------------|:-----------|:-----------|
+| `trim_probs` | Lower and upper survey-weighted quantiles defining the exposure range used for modeling | `c(0.01, 0.99)` | `c(0.01, 0.99)` or `NULL` |
+| `knot_probs` | Survey-weighted quantiles used to place spline knots and define the boundary knots | `c(0.05, 0.50, 0.95)` | `c(0.05, 0.50, 0.95)` |
+| `ref_prob` | Survey-weighted quantile defining the HR = 1 reference value | `0.10` | `0.10` |
+| `report_points` | Exposure values at which HRs and 95% CIs are returned | `NULL` | `c(25, 30)` |
+| `grid_by` | Spacing of exposure values used for prediction | `1` | `1` |
+| `round_to` | Increment used to round the reference value and prediction limits | `1` | `1` |
 
 ### Choosing the spline settings
 
@@ -139,6 +138,8 @@ The main arguments are:
 `knot_probs` defines the survey-weighted percentiles used to place spline knots. More probabilities can be supplied when additional knots are appropriate. Sparse exposure distributions can produce unstable or non-unique knots.
 
 `ref_prob` defines the exposure percentile used as the HR = 1 reference. For example, `ref_prob = 0.10` uses the survey-weighted 10th percentile as the reference.
+
+`report_points` specifies exposure values at which HRs and 95% CIs are returned; for example, `report_points = c(25, 30)` returns estimates at BMI values of 20 and 30 kg/m².
 
 `grid_by` controls the spacing of exposure values used for predictions, while `round_to` controls rounding of the reference value and prediction limits.
 
@@ -158,6 +159,7 @@ The main returned objects are:
 | `fit_linear` | Corresponding survey-weighted Cox model with a linear exposure term |
 | `pred_spline` | Predicted HRs and 95% CIs from the spline model |
 | `pred_linear` | Predicted HRs and 95% CIs from the linear model |
+| `pred_points` | Predicted HRs and 95% CIs at user-specified `report_points` |
 | `knots` | Exposure values corresponding to the spline knots |
 | `ref_val` | Exposure value used as the HR = 1 reference |
 | `nonlinearity_p` | Numeric p-value for the test of non-linearity |
@@ -176,6 +178,12 @@ head(res_bmi$pred_spline)
 
 The prediction data contain the exposure value, estimated HR, and lower and upper 95% confidence limits.
 
+Inspect the estimated HRs and 95% CIs at the specified exposure values:
+
+```{r}
+res_bmi$pred_points[, c("bmi", "HR", "lo", "hi")]
+```
+
 ## Interpreting the test for non-linearity
 
 `fit_svycoxspline()` provides a p-value from a Wald test of the spline terms used to represent departure from linearity.
@@ -191,6 +199,29 @@ ggplot(res_bmi$pred_spline, aes(x = bmi, y = HR)) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_vline(
+    data = res_bmi$pred_points,
+    aes(xintercept = bmi),
+    linetype = "dotted"
+  ) +
+  geom_point(
+    data = res_bmi$pred_points,
+    aes(x = bmi, y = HR),
+    size = 3
+  ) +
+geom_label(
+  data = res_bmi$pred_points,
+  aes(
+    x = bmi,
+    y = HR,
+    label = sprintf(
+      "BMI = %.0f\n%.2f (%.2f, %.2f)",
+      bmi, HR, lo, hi
+    )
+  ),
+  nudge_y = 0.20,
+  size = 2.5
+) +
   scale_y_log10() +
   labs(
     title = "NHANES 2011-2014",
@@ -264,6 +295,7 @@ res_female <- fit_svycoxspline(
   trim_probs = c(0.01, 0.99),
   knot_probs = c(0.05, 0.50, 0.95),
   ref_prob = 0.10,
+  report_points = c(25, 30),
   grid_by = 1,
   round_to = 1
 )
@@ -277,6 +309,7 @@ res_male <- fit_svycoxspline(
   trim_probs = c(0.01, 0.99),
   knot_probs = c(0.05, 0.50, 0.95),
   ref_prob = 0.10,
+  report_points = c(25, 30),
   grid_by = 1,
   round_to = 1
 )
@@ -289,6 +322,11 @@ pred_combined <- rbind(
   transform(res_female$pred_spline, sex = "Female"),
   transform(res_male$pred_spline, sex = "Male")
 )
+
+points_combined <- rbind(
+  transform(res_female$pred_points, sex = "Female"),
+  transform(res_male$pred_points, sex = "Male")
+)
 ```
 
 ```{r}
@@ -296,9 +334,57 @@ ggplot(
   pred_combined,
   aes(x = bmi, y = HR, colour = sex, fill = sex, linetype = sex)
 ) +
-  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, colour = NA) +
+  geom_ribbon(
+    aes(ymin = lo, ymax = hi),
+    alpha = 0.2,
+    colour = NA
+  ) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_vline(
+    data = points_combined,
+    aes(xintercept = bmi),
+    inherit.aes = FALSE,
+    linetype = "dotted"
+  ) +
+  geom_point(
+    data = points_combined,
+    aes(x = bmi, y = HR, colour = sex),
+    inherit.aes = FALSE,
+    size = 3
+  ) +
+  geom_label(
+    data = subset(points_combined, sex == "Female"),
+    aes(
+      x = bmi,
+      y = HR,
+      colour = sex,
+      label = sprintf(
+        "BMI = %.0f\n%.2f (%.2f, %.2f)",
+        bmi, HR, lo, hi
+      )
+    ),
+    inherit.aes = FALSE,
+    nudge_y = -0.18,
+    size = 2.5,
+    show.legend = FALSE
+  ) +
+  geom_label(
+    data = subset(points_combined, sex == "Male"),
+    aes(
+      x = bmi,
+      y = HR,
+      colour = sex,
+      label = sprintf(
+        "BMI = %.0f\n%.2f (%.2f, %.2f)",
+        bmi, HR, lo, hi
+      )
+    ),
+    inherit.aes = FALSE,
+    nudge_y = 0.18,
+    size = 2.5,
+    show.legend = FALSE
+  ) +
   scale_y_log10() +
   labs(
     title = "NHANES 2011-2014",

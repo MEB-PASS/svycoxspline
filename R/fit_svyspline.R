@@ -1,13 +1,15 @@
 fit_svycoxspline <- function(design,
-                          exposure_var,
-                          time_var,
-                          event_var,
-                          covariates,
-                          trim_probs = c(0.01, 0.99),
-                          knot_probs = c(0.05, 0.50, 0.95),
-                          ref_prob = 0.10,
-                          grid_by = 1,
-                          round_to = 1) {
+                             exposure_var,
+                             time_var,
+                             event_var,
+                             covariates,
+                             trim_probs = c(0.01, 0.99),
+                             knot_probs = c(0.05, 0.50, 0.95),
+                             ref_prob = 0.10,
+                             grid_by = 1,
+                             round_to = 1,
+                             report_points = NULL) {
+
   # ------------------------------------------------------------
   # 0. Basic checks
   # ------------------------------------------------------------
@@ -49,6 +51,15 @@ fit_svycoxspline <- function(design,
     stop("round_to must be greater than 0.")
   }
 
+  if (!is.null(report_points)) {
+
+    if (!is.numeric(report_points) ||
+        any(!is.finite(report_points))) {
+      stop("report_points must be a numeric vector.")
+    }
+
+  }
+
   # ------------------------------------------------------------
   # 1. Trim exposure extremes
   # ------------------------------------------------------------
@@ -86,6 +97,21 @@ fit_svycoxspline <- function(design,
       get(exposure_var) >= lo_b &
         get(exposure_var) <= hi_b
     )
+  }
+
+  # Check report points against the modeled exposure range
+  if (!is.null(report_points)) {
+
+    if (any(report_points < lo_b | report_points > hi_b)) {
+      stop(
+        "All report_points must fall within the modeled exposure range: ",
+        round(lo_b, 3),
+        " to ",
+        round(hi_b, 3),
+        "."
+      )
+    }
+
   }
 
   # Number of participants and outcome events after trimming
@@ -285,6 +311,68 @@ fit_svycoxspline <- function(design,
   names(pred_df)[1] <- exposure_var
 
   # ------------------------------------------------------------
+  # 5a. Predictions at user-specified reporting points
+  # ------------------------------------------------------------
+
+  if (!is.null(report_points)) {
+
+    X_points <- as.matrix(
+      splines::ns(
+        report_points,
+        knots = knots[-c(1, length(knots))],
+        Boundary.knots = range(knots)
+      )
+    )
+
+    # Contrast each reporting point against reference
+    L_points <- t(X_points) -
+      matrix(
+        X_ref,
+        nrow = nc,
+        ncol = length(report_points)
+      )
+
+    # Log HR and standard error
+    lnHR_points <- as.numeric(
+      t(L_points) %*% b
+    )
+
+    SE_points <- sqrt(
+      diag(
+        t(L_points) %*% V %*% L_points
+      )
+    )
+
+    # Reporting point results
+    pred_points <- data.frame(
+      x = report_points,
+      lnHR = lnHR_points,
+      SE = SE_points
+    )
+
+    pred_points$HR <- exp(
+      pred_points$lnHR
+    )
+
+    pred_points$lo <- exp(
+      pred_points$lnHR -
+        1.96 * pred_points$SE
+    )
+
+    pred_points$hi <- exp(
+      pred_points$lnHR +
+        1.96 * pred_points$SE
+    )
+
+    names(pred_points)[1] <- exposure_var
+
+  } else {
+
+    pred_points <- NULL
+
+  }
+
+  # ------------------------------------------------------------
   # 6. Fit linear comparison model
   # ------------------------------------------------------------
 
@@ -460,6 +548,7 @@ fit_svycoxspline <- function(design,
     fit_linear = fit_lin,
     pred_spline = pred_df,
     pred_linear = pred_linear,
+    pred_points = pred_points,
     knots = knots,
     ref_val = ref_val,
     nonlinearity_p = wald_p,
