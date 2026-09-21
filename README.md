@@ -148,3 +148,7 @@ vignette("vignette-svycoxspline")
 ## Reporting issues
 
 Please report comments, suggestions, errors, and bugs through the GitHub Issues page.
+
+## Acknowledgements
+
+Special thanks to Hayden Hayes, Sang Kyu Lee, and Barry Graubard for their contributions to the development and testing of this package.
