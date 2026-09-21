@@ -1,11 +1,10 @@
 ---
 title: "svyspline: Introduction and Examples"
 output: rmarkdown::html_vignette
-bibliography: library.bib
 vignette: >
-  %\\VignetteIndexEntry{Introduction to svyspline}
-  %\\VignetteEngine{knitr::rmarkdown}
-  %\\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Introduction to svyspline}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include = FALSE}

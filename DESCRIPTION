@@ -1,6 +1,6 @@
 Package: svyspline
 Type: Package
-Title: Survey-Weighted Spline Models for Survival Analysis
+Title: Survey-Weighted Cox Proportional Hazards Models with Restricted Cubic Splines
 Version: 0.1.0
 Authors@R: 
     person("Alaina", "Shreves", role = c("aut", "cre"))

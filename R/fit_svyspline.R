@@ -1,4 +1,4 @@
-fit_svyspline <- function(design,
+fit_svycoxspline <- function(design,
                           exposure_var,
                           time_var,
                           event_var,
