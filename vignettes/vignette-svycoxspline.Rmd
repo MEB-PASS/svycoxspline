@@ -50,6 +50,11 @@ Other complex surveys may use different sampling designs and design variables. U
 # Load packages
 
 ```{r, eval = FALSE}
+install.packages("remotes")
+remotes::install_github("MEB-PASS/svycoxspline")
+```
+
+```{r}
 library(svycoxspline)
 library(survey)
 library(ggplot2)
@@ -199,36 +204,33 @@ ggplot(res_bmi$pred_spline, aes(x = bmi, y = HR)) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
-  geom_vline(
+  geom_vline(data = res_bmi$pred_points,
+             aes(xintercept = bmi),
+             linetype = "dotted") +
+  geom_point(data = res_bmi$pred_points,
+             aes(x = bmi, y = HR),
+             size = 3) +
+  geom_label(
     data = res_bmi$pred_points,
-    aes(xintercept = bmi),
-    linetype = "dotted"
+    aes(
+      x = bmi,
+      y = HR,
+      label = sprintf("BMI = %.0f\n%.2f (%.2f, %.2f)", bmi, HR, lo, hi)
+    ),
+    nudge_y = 0.20,
+    size = 2.5
   ) +
-  geom_point(
-    data = res_bmi$pred_points,
-    aes(x = bmi, y = HR),
-    size = 3
-  ) +
-geom_label(
-  data = res_bmi$pred_points,
-  aes(
-    x = bmi,
-    y = HR,
-    label = sprintf(
-      "BMI = %.0f\n%.2f (%.2f, %.2f)",
-      bmi, HR, lo, hi
-    )
-  ),
-  nudge_y = 0.20,
-  size = 2.5
-) +
   scale_y_log10() +
   labs(
     title = "NHANES 2011-2014",
     subtitle = paste0(
-      "Reference = ", res_bmi$ref_val,
-      "; Knots = (", paste(round(res_bmi$knots, 1), collapse = ", "), ")",
-      "; p-nonlinear = ", res_bmi$nonlinearity_p_label
+      "Reference = ",
+      res_bmi$ref_val,
+      "; Knots = (",
+      paste(round(res_bmi$knots, 1), collapse = ", "),
+      ")",
+      "; p-nonlinear = ",
+      res_bmi$nonlinearity_p_label
     ),
     x = "Body mass index (kg/m²)",
     y = "Adjusted hazard ratio (95% CI)"
@@ -261,9 +263,13 @@ ggplot(pred_compare, aes(x = bmi, y = HR, linetype = model)) +
   labs(
     title = "NHANES 2011-2014",
     subtitle = paste0(
-      "Reference = ", res_bmi$ref_val,
-      "; Knots = (", paste(round(res_bmi$knots, 1), collapse = ", "), ")",
-      "; p-nonlinear = ", res_bmi$nonlinearity_p_label
+      "Reference = ",
+      res_bmi$ref_val,
+      "; Knots = (",
+      paste(round(res_bmi$knots, 1), collapse = ", "),
+      ")",
+      "; p-nonlinear = ",
+      res_bmi$nonlinearity_p_label
     ),
     x = "Body mass index (kg/m²)",
     y = "Adjusted hazard ratio (95% CI)",
@@ -330,15 +336,15 @@ points_combined <- rbind(
 ```
 
 ```{r}
-ggplot(
-  pred_combined,
-  aes(x = bmi, y = HR, colour = sex, fill = sex, linetype = sex)
-) +
-  geom_ribbon(
-    aes(ymin = lo, ymax = hi),
-    alpha = 0.2,
-    colour = NA
-  ) +
+ggplot(pred_combined,
+       aes(
+         x = bmi,
+         y = HR,
+         colour = sex,
+         fill = sex,
+         linetype = sex
+       )) +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, colour = NA) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
   geom_vline(
@@ -359,10 +365,7 @@ ggplot(
       x = bmi,
       y = HR,
       colour = sex,
-      label = sprintf(
-        "BMI = %.0f\n%.2f (%.2f, %.2f)",
-        bmi, HR, lo, hi
-      )
+      label = sprintf("BMI = %.0f\n%.2f (%.2f, %.2f)", bmi, HR, lo, hi)
     ),
     inherit.aes = FALSE,
     nudge_y = -0.18,
@@ -375,10 +378,7 @@ ggplot(
       x = bmi,
       y = HR,
       colour = sex,
-      label = sprintf(
-        "BMI = %.0f\n%.2f (%.2f, %.2f)",
-        bmi, HR, lo, hi
-      )
+      label = sprintf("BMI = %.0f\n%.2f (%.2f, %.2f)", bmi, HR, lo, hi)
     ),
     inherit.aes = FALSE,
     nudge_y = 0.18,

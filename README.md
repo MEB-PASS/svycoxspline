@@ -71,7 +71,7 @@ The function can optionally:
 The default settings provide a starting point, but exposure trimming, knot placement, and the reference value should be selected based on the exposure distribution and scientific question. These choices can affect the fitted association and should not be treated as universal defaults (Desquilbet & Mariotti, 2010).
 
 | Argument | Purpose | Default | Example |
-|:---|:---|:---|:---|
+|:-------------|:------------------------------|:-------------|:-------------|
 | `trim_probs` | Lower and upper survey-weighted quantiles defining the exposure range used for modeling | `c(0.01, 0.99)` | `c(0.01, 0.99)` or `NULL` |
 | `knot_probs` | Survey-weighted quantiles used to place spline knots and define the boundary knots | `c(0.05, 0.50, 0.95)` | `c(0.05, 0.50, 0.95)` |
 | `ref_prob` | Survey-weighted quantile defining the HR = 1 reference value | `0.10` | `0.10` |
