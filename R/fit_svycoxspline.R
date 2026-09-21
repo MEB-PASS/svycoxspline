@@ -1,3 +1,6 @@
+#' Fit a survey-weighted Cox proportional hazards model with natural cubic splines
+#'
+#' @export
 fit_svycoxspline <- function(design,
                              exposure_var,
                              time_var,
