@@ -517,11 +517,11 @@ fit_svycoxspline <- function(design,
 
   } else if (wald_p < 0.05) {
 
-    "Evidence of departure from linearity."
+    "Wald P-value is statistically significant - evidence of departure from linearity."
 
   } else {
 
-    "No evidence of departure from linearity."
+    "Wald P-value is not statistically significant - no evidence of departure from linearity."
   }
 
   # ------------------------------------------------------------
