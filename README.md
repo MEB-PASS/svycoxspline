@@ -77,7 +77,7 @@ The default settings provide a starting point, but exposure trimming, knot place
 | `ref_prob` | Survey-weighted quantile defining the HR = 1 reference value | `0.10` | `0.10` |
 | `report_points` | Exposure values at which HRs and 95% CIs are returned | `NULL` | `c(25, 30)` |
 | `grid_by` | Spacing of exposure values used for prediction | `1` | `1` |
-| `round_to` | Increment used to round the reference value and prediction limits | `1` | `1` |
+| `round_to` | Increment used to round the reference value and prediction limits; `1` rounds to whole units, `0.1` to tenths, and `10` to multiples of 10 | `1` | `1` |
 
 For example with no trimming:
 

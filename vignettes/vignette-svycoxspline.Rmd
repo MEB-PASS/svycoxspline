@@ -1,11 +1,25 @@
 ---
-title: "Survey-Weighted Cox Proportional Hazards Models with Natural Cubic Splines"
+title: "svycoxspline: Introduction and examples"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Survey-Weighted Cox Proportional Hazards Models with Natural Cubic Splines}
+  %\VignetteIndexEntry{vignette-svycoxspline}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+<style>
+h1 {
+  font-size: 26px;
+}
+
+h2 {
+  font-size: 22px;
+}
+
+h3 {
+  font-size: 18px;
+}
+</style>
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
@@ -22,16 +36,16 @@ knitr::opts_chunk$set(
 
 The main function, `fit_svycoxspline()`, takes an existing `survey` design object and:
 
-- calculates survey-weighted spline knots and a reference value
-- fits a survey-weighted Cox model with spline terms
-- generates predicted hazard ratios (HRs) and 95% confidence intervals
-- optionally trims the exposure using survey-weighted quantiles
-- fits a corresponding linear Cox model
-- tests for evidence of departure from linearity
+-   calculates survey-weighted spline knots and a reference value
+-   fits a survey-weighted Cox model with spline terms
+-   generates predicted hazard ratios (HRs) and 95% confidence intervals
+-   optionally trims the exposure using survey-weighted quantiles
+-   fits a corresponding linear Cox model
+-   tests for evidence of departure from linearity
 
 The basic workflow is:
 
-```text
+``` text
 Create survey design
        ↓
 Apply analytic restrictions
@@ -128,13 +142,13 @@ res_bmi <- fit_svycoxspline(
 The main arguments are:
 
 | Argument | Purpose | Default | Example |
-|:-----------|:-----------------------------------|:-----------|:-----------|
+|:--------------|:--------------------------|:--------------|:--------------|
 | `trim_probs` | Lower and upper survey-weighted quantiles defining the exposure range used for modeling | `c(0.01, 0.99)` | `c(0.01, 0.99)` or `NULL` |
 | `knot_probs` | Survey-weighted quantiles used to place spline knots and define the boundary knots | `c(0.05, 0.50, 0.95)` | `c(0.05, 0.50, 0.95)` |
 | `ref_prob` | Survey-weighted quantile defining the HR = 1 reference value | `0.10` | `0.10` |
 | `report_points` | Exposure values at which HRs and 95% CIs are returned | `NULL` | `c(25, 30)` |
 | `grid_by` | Spacing of exposure values used for prediction | `1` | `1` |
-| `round_to` | Increment used to round the reference value and prediction limits | `1` | `1` |
+| `round_to` | Increment used to round the reference value and prediction limits; `1` rounds to whole units, `0.1` to tenths, and `10` to multiples of 10 | `1` | `1` |
 
 ### Choosing the spline settings
 
@@ -146,7 +160,9 @@ The main arguments are:
 
 `report_points` specifies exposure values at which HRs and 95% CIs are returned; for example, `report_points = c(25, 30)` returns estimates at BMI values of 20 and 30 kg/m².
 
-`grid_by` controls the spacing of exposure values used for predictions, while `round_to` controls rounding of the reference value and prediction limits.
+`grid_by` controls the spacing of exposure values used for predictions/
+
+`round_to` controls the increment used to round the reference value and the lower and upper limits of the prediction grid. The default is `round_to = 1`, which rounds these values to the nearest whole unit. For exposures where smaller increments are meaningful, users can specify a smaller value. For example, `round_to = 0.1` rounds to the nearest 0.1 units, while `round_to = 10` rounds to the nearest 10 units. Choose a value that is appropriate for the scale and interpretation of the exposure.
 
 # Examine the results
 
@@ -159,7 +175,7 @@ names(res_bmi)
 The main returned objects are:
 
 | Returned object | Description |
-|:--|:--|
+|:-----------------------------------|:-----------------------------------|
 | `fit_spline` | Survey-weighted Cox model containing spline terms |
 | `fit_linear` | Corresponding survey-weighted Cox model with a linear exposure term |
 | `pred_spline` | Predicted HRs and 95% CIs from the spline model |
@@ -195,7 +211,47 @@ res_bmi$pred_points[, c("bmi", "HR", "lo", "hi")]
 
 A smaller p-value provides evidence that the association differs from a linear relationship. A larger p-value indicates insufficient evidence to reject linearity. Interpret this test alongside the estimated curve, confidence intervals, exposure distribution, and model assumptions rather than in isolation.
 
-# Plot the spline association
+### Table of results
+
+The predicted hazard ratios (HRs) and 95% confidence intervals at all exposure values along the spline curve can be exported as a results table. The table also includes the Wald p-value for the test of non-linearity.
+
+```{r}
+results_table <- res_bmi$pred_spline
+
+results_table$`HR (95% CI)` <- sprintf(
+  "%.2f (%.2f, %.2f)",
+  results_table$HR,
+  results_table$lo,
+  results_table$hi
+)
+
+results_table$wald_p_nonlinearity <- res_bmi$nonlinearity_p
+
+# Identify exposure variable
+exposure_var <- names(results_table)[1]
+
+# Identify reference value
+results_table$reference <- ifelse(
+  results_table[[exposure_var]] == res_bmi$ref_val,
+  "Reference",
+  ""
+)
+
+# Keep exposure, formatted HR (95% CI), reference indicator,
+# and Wald p-value
+results_table <- results_table[
+  , c(
+    exposure_var,
+    "HR (95% CI)",
+    "wald_p_nonlinearity",
+    "reference"
+  )
+]
+
+head(results_table)
+```
+
+### Plot the association
 
 The predicted hazard ratios can be visualized directly with `ggplot2`.
 
@@ -238,7 +294,7 @@ ggplot(res_bmi$pred_spline, aes(x = bmi, y = HR)) +
   theme_minimal()
 ```
 
-# Compare spline and linear associations
+### Compare spline and linear associations
 
 `fit_svycoxspline()` also fits a corresponding linear Cox model. The two prediction sets can be combined to compare the fitted associations.
 
@@ -335,6 +391,52 @@ points_combined <- rbind(
 )
 ```
 
+### Table of results
+
+Estimates can be stored in a table.
+
+```{r}
+results_table_sex <- pred_combined
+
+results_table_sex$`HR (95% CI)` <- sprintf(
+  "%.2f (%.2f, %.2f)",
+  results_table_sex$HR,
+  results_table_sex$lo,
+  results_table_sex$hi
+)
+
+results_table_sex$wald_p_nonlinearity <- ifelse(
+  results_table_sex$sex == "Female",
+  res_female$nonlinearity_p,
+  res_male$nonlinearity_p
+)
+
+# Keep exposure, sex, formatted HR (95% CI), and Wald p-value
+exposure_var <- names(results_table_sex)[1]
+
+results_table_sex <- results_table_sex[
+  , c(exposure_var, "sex", "HR (95% CI)", "wald_p_nonlinearity")
+]
+
+# specify reference row
+results_table_sex$reference <- ifelse(
+  (results_table_sex$sex == "Female" &
+     results_table_sex[[exposure_var]] == res_female$ref_val) |
+  (results_table_sex$sex == "Male" &
+     results_table_sex[[exposure_var]] == res_male$ref_val),
+  "Reference",
+  ""
+)
+
+head(results_table_sex)
+```
+
+### Plot the association
+
+Subgroup predictions can be plotted.
+
+Note that exposure quantiles are calculated separately within each subgroup, so knot locations and reference values may differ between subgroups.
+
 ```{r}
 ggplot(pred_combined,
        aes(
@@ -396,8 +498,6 @@ ggplot(pred_combined,
   ) +
   theme_minimal()
 ```
-
-Exposure quantiles are calculated separately within each subgroup, so knot locations and reference values may differ between subgroups.
 
 # Important considerations
 

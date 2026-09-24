@@ -237,11 +237,14 @@ fit_svycoxspline <- function(design,
   # 5. Prediction grid
   # ------------------------------------------------------------
 
-  grid <- seq(
-    floor(lo_b / round_to) * round_to,
-    ceiling(hi_b / round_to) * round_to,
-    by = grid_by
-  )
+  grid <- sort(unique(c(
+    seq(
+      floor(lo_b / round_to) * round_to,
+      ceiling(hi_b / round_to) * round_to,
+      by = grid_by
+    ),
+    ref_val
+  )))
 
   # Spline basis for prediction grid
   X_grid <- as.matrix(
