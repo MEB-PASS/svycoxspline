@@ -177,7 +177,7 @@ fit_svycoxspline <- function(design,
   names(update_args) <- colnames(X_ns)
 
   design <- do.call(
-    update,
+    stats::update,
     c(list(design), update_args)
   )
 
