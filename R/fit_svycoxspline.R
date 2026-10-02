@@ -231,6 +231,29 @@ fit_svycoxspline <- function(design,
   )
 
   # ------------------------------------------------------------
+  # 4a. Test for overall spline association
+  # ------------------------------------------------------------
+
+  overall_p <- tryCatch({
+
+    p <- survey::regTermTest(
+      fit_spline,
+      as.formula(
+        paste("~", spline_terms)
+      )
+    )$p
+
+    if (is.null(p)) {
+      NA_real_
+    } else {
+      as.numeric(p)
+    }
+
+  }, error = function(e) {
+    NA_real_
+  })
+
+  # ------------------------------------------------------------
   # 5. Prediction grid
   # ------------------------------------------------------------
 
@@ -375,7 +398,7 @@ fit_svycoxspline <- function(design,
   }
 
   # ------------------------------------------------------------
-  # 6. Fit linear comparison model and calculate P for trend
+  # 6. Fit linear comparison model and test linear trend
   # ------------------------------------------------------------
 
   if (length(covariates) == 0) {
@@ -455,10 +478,7 @@ fit_svycoxspline <- function(design,
   # 7. Test for non-linearity
   # ------------------------------------------------------------
 
-  # NOTE:
-  # This uses s2:nc as the non-linear terms. This should be
-  # validated before treating the resulting p-value as a
-  # general-purpose test of non-linearity.
+  # Test whether the non-linear spline terms are jointly zero.
   if (nc > 1) {
 
     nonlin_terms <- paste0(
@@ -467,7 +487,7 @@ fit_svycoxspline <- function(design,
       collapse = " + "
     )
 
-    wald_p <- tryCatch({
+    nonlinearity_p <- tryCatch({
 
       p <- survey::regTermTest(
         fit_spline,
@@ -488,56 +508,50 @@ fit_svycoxspline <- function(design,
 
   } else {
 
-    wald_p <- NA_real_
+    nonlinearity_p <- NA_real_
   }
 
   # ------------------------------------------------------------
   # 8. Format p-values
   # ------------------------------------------------------------
 
-  trend_p_label <- if (is.na(trend_p)) {
+  format_p <- function(p) {
 
-    NA_character_
+    if (is.na(p)) {
 
-  } else if (trend_p < 0.005) {
+      NA_character_
 
-    "<0.005"
+    } else if (p < 0.005) {
 
-  } else {
+      "<0.005"
 
-    formatC(
-      trend_p,
-      format = "f",
-      digits = 3
-    )
+    } else {
+
+      formatC(
+        p,
+        format = "f",
+        digits = 3
+      )
+    }
   }
 
-  nonlinearity_p_label <- if (is.na(wald_p)) {
+  overall_p_label <- format_p(overall_p)
 
-    NA_character_
+  nonlinearity_p_label <- format_p(
+    nonlinearity_p
+  )
 
-  } else if (wald_p < 0.005) {
-
-    "<0.005"
-
-  } else {
-
-    formatC(
-      wald_p,
-      format = "f",
-      digits = 3
-    )
-  }
+  trend_p_label <- format_p(trend_p)
 
   # ------------------------------------------------------------
   # 9. Interpret p-value for non-linearity
   # ------------------------------------------------------------
 
-  interpretation <- if (is.na(wald_p)) {
+  interpretation <- if (is.na(nonlinearity_p)) {
 
     "Non-linearity could not be assessed."
 
-  } else if (wald_p < 0.05) {
+  } else if (nonlinearity_p < 0.05) {
 
     paste0(
       "Wald P-value is statistically significant - ",
@@ -564,11 +578,14 @@ fit_svycoxspline <- function(design,
     "Outcome events = ",
     format(n_events, big.mark = ","),
     "\n",
-    "P for trend = ",
-    trend_p_label,
+    "P for overall association = ",
+    overall_p_label,
     "\n",
     "P for non-linearity = ",
     nonlinearity_p_label,
+    "\n",
+    "P for linear trend = ",
+    trend_p_label,
     "\n",
     interpretation
   )
@@ -585,10 +602,12 @@ fit_svycoxspline <- function(design,
     pred_points = pred_points,
     knots = knots,
     ref_val = ref_val,
+    overall_p = overall_p,
+    overall_p_label = overall_p_label,
+    nonlinearity_p = nonlinearity_p,
+    nonlinearity_p_label = nonlinearity_p_label,
     trend_p = trend_p,
     trend_p_label = trend_p_label,
-    nonlinearity_p = wald_p,
-    nonlinearity_p_label = nonlinearity_p_label,
     design_clipped = design
   )
 }
