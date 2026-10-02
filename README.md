@@ -2,7 +2,7 @@
 
 `svycoxspline` is an R package for fitting and visualizing associations between continuous exposures and survival outcomes using survey-weighted Cox proportional hazards models with natural cubic splines.
 
-The main function, `fit_svycoxspline()`, fits survey-weighted Cox models with natural cubic splines and returns predicted hazard ratios (HRs), 95% confidence intervals, and a test for non-linearity.
+The main function, `fit_svycoxspline()`, fits survey-weighted Cox models with natural cubic splines and returns predicted hazard ratios (HRs), 95% confidence intervals, and p-values for the overall spline association, non-linearity, and linear trend.
 
 ## Getting started
 
@@ -25,7 +25,7 @@ Create the survey design and define survey weights before applying analytic or s
 
 This example uses the NHANES survey design variables. Other complex surveys may use different sampling designs and design variables.
 
-Users should construct the survey design object using the appropriate specification for their data before passing it to fit_svycoxspline().
+Users should construct the survey design object using the appropriate specification for their data before passing it to `fit_svycoxspline()`.
 
 ``` r
 survey_design <- svydesign(
@@ -58,13 +58,15 @@ res <- fit_svycoxspline(
 
 The function can optionally:
 
--   trim extreme exposure values using survey-weighted quantiles
--   place spline knots using survey-weighted quantiles
--   define the HR reference value using a survey-weighted quantile
--   generate predictions across the exposure range
--   return HRs and 95% CIs at user-specified exposure values
--   compare the spline association with a linear model
--   test for non-linearity
+- trim extreme exposure values using survey-weighted quantiles
+- place spline knots using survey-weighted quantiles
+- define the HR reference value using a survey-weighted quantile
+- generate predictions across the exposure range
+- return HRs and 95% CIs at user-specified exposure values
+- compare the spline association with a linear model
+- test the overall spline association
+- test for non-linearity
+- test for linear trend
 
 ## Main arguments and spline settings
 
@@ -94,7 +96,7 @@ res <- fit_svycoxspline(
 )
 ```
 
-For example with trimming, specified knots, specific points of interest:
+For example with trimming, specified knots, and specific points of interest:
 
 ``` r
 res <- fit_svycoxspline(
@@ -105,7 +107,7 @@ res <- fit_svycoxspline(
   covariates = c("age", "factor(sex)"),
   trim_probs = c(0.01, 0.99),
   knot_probs = c(0.05, 0.50, 0.95),
-  report_points = c(20, 30)
+  report_points = c(20, 30),
   ref_prob = 0.10
 )
 ```
@@ -114,28 +116,46 @@ res <- fit_svycoxspline(
 
 The fitted object includes:
 
--   `fit_spline` - survey-weighted Cox model with spline terms
--   `fit_linear` - corresponding linear Cox model
--   `pred_spline` - predicted HRs and 95% CIs from the spline model
--   `pred_linear` - predicted HRs and 95% CIs from the linear model
--   `pred_points` - predicted HRs and 95% CIs at user-specified `report_points`
--   `knots` - spline knot locations
--   `ref_val` - exposure value corresponding to HR = 1
--   `nonlinearity_p` - p-value for the test of non-linearity
--   `nonlinearity_p_label` - formatted non-linearity p-value
--   `design_clipped` - survey design used for model fitting
+- `fit_spline` - survey-weighted Cox model with spline terms
+- `fit_linear` - corresponding linear Cox model
+- `pred_spline` - predicted HRs and 95% CIs from the spline model
+- `pred_linear` - predicted HRs and 95% CIs from the linear model
+- `pred_points` - predicted HRs and 95% CIs at user-specified `report_points`
+- `knots` - spline knot locations
+- `ref_val` - exposure value corresponding to HR = 1
+- `overall_p` - numeric p-value for the overall spline association
+- `overall_p_label` - formatted p-value for the overall spline association
+- `nonlinearity_p` - numeric p-value for the test of non-linearity
+- `nonlinearity_p_label` - formatted p-value for the test of non-linearity
+- `trend_p` - numeric p-value for the linear trend test
+- `trend_p_label` - formatted p-value for the linear trend test
+- `design_clipped` - survey design used for model fitting after optional trimming
+
+The three association tests answer different questions:
+
+- `overall_p` tests whether the spline terms are jointly associated with the outcome.
+- `nonlinearity_p` tests for evidence that the spline association departs from linearity.
+- `trend_p` tests the continuous exposure term in the corresponding linear Cox model.
 
 For example:
 
 ``` r
 res$knots
 res$ref_val
+
+res$overall_p
+res$nonlinearity_p
+res$trend_p
+
+res$overall_p_label
 res$nonlinearity_p_label
+res$trend_p_label
+
 head(res$pred_spline)
 res$pred_points
 ```
 
-Pass the resulting survey design to `fit_svycoxspline()`.
+The numeric p-values can be used directly when creating or exporting results tables, while the corresponding `_label` objects provide formatted values for display.
 
 ## Vignette
 
