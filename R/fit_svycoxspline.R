@@ -27,7 +27,6 @@ fit_svycoxspline <- function(design,
     if (any(trim_probs <= 0 | trim_probs >= 1)) {
       stop("trim_probs must be between 0 and 1.")
     }
-
   }
 
   if (length(knot_probs) < 3) {
@@ -60,7 +59,6 @@ fit_svycoxspline <- function(design,
         any(!is.finite(report_points))) {
       stop("report_points must be a numeric vector.")
     }
-
   }
 
   # ------------------------------------------------------------
@@ -114,7 +112,6 @@ fit_svycoxspline <- function(design,
         "."
       )
     }
-
   }
 
   # Number of participants and outcome events after trimming
@@ -375,11 +372,10 @@ fit_svycoxspline <- function(design,
   } else {
 
     pred_points <- NULL
-
   }
 
   # ------------------------------------------------------------
-  # 6. Fit linear comparison model
+  # 6. Fit linear comparison model and calculate P for trend
   # ------------------------------------------------------------
 
   if (length(covariates) == 0) {
@@ -416,11 +412,18 @@ fit_svycoxspline <- function(design,
     design = design
   )
 
+  # Linear coefficient and variance
   beta <- coef(fit_lin)[exposure_var]
 
   vbeta <- vcov(fit_lin)[
     exposure_var,
     exposure_var
+  ]
+
+  # P for linear trend
+  trend_p <- summary(fit_lin)$coefficients[
+    exposure_var,
+    "Pr(>|z|)"
   ]
 
   # Linear prediction data frame
@@ -486,14 +489,30 @@ fit_svycoxspline <- function(design,
   } else {
 
     wald_p <- NA_real_
-
   }
 
   # ------------------------------------------------------------
-  # 8. Format p-value
+  # 8. Format p-values
   # ------------------------------------------------------------
 
-  p_label <- if (is.na(wald_p)) {
+  trend_p_label <- if (is.na(trend_p)) {
+
+    NA_character_
+
+  } else if (trend_p < 0.005) {
+
+    "<0.005"
+
+  } else {
+
+    formatC(
+      trend_p,
+      format = "f",
+      digits = 3
+    )
+  }
+
+  nonlinearity_p_label <- if (is.na(wald_p)) {
 
     NA_character_
 
@@ -511,7 +530,7 @@ fit_svycoxspline <- function(design,
   }
 
   # ------------------------------------------------------------
-  # 9. Interpret p-value
+  # 9. Interpret p-value for non-linearity
   # ------------------------------------------------------------
 
   interpretation <- if (is.na(wald_p)) {
@@ -520,11 +539,17 @@ fit_svycoxspline <- function(design,
 
   } else if (wald_p < 0.05) {
 
-    "Wald P-value is statistically significant - evidence of departure from linearity."
+    paste0(
+      "Wald P-value is statistically significant - ",
+      "evidence of departure from linearity."
+    )
 
   } else {
 
-    "Wald P-value is not statistically significant - no evidence of departure from linearity."
+    paste0(
+      "Wald P-value is not statistically significant - ",
+      "no evidence of departure from linearity."
+    )
   }
 
   # ------------------------------------------------------------
@@ -539,8 +564,11 @@ fit_svycoxspline <- function(design,
     "Outcome events = ",
     format(n_events, big.mark = ","),
     "\n",
+    "P for trend = ",
+    trend_p_label,
+    "\n",
     "P for non-linearity = ",
-    p_label,
+    nonlinearity_p_label,
     "\n",
     interpretation
   )
@@ -557,8 +585,10 @@ fit_svycoxspline <- function(design,
     pred_points = pred_points,
     knots = knots,
     ref_val = ref_val,
+    trend_p = trend_p,
+    trend_p_label = trend_p_label,
     nonlinearity_p = wald_p,
-    nonlinearity_p_label = p_label,
+    nonlinearity_p_label = nonlinearity_p_label,
     design_clipped = design
   )
 }
