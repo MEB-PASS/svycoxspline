@@ -123,7 +123,7 @@ NHANES_qc <- subset(
 
 A model uses BMI as the exposure, mortality as the event, and follow-up time in months, adjusting for age and sex.
 
-```{r}
+```{r, message=FALSE, results='hide'}
 res_bmi <- fit_svycoxspline(
   design = NHANES_qc,
   exposure_var = "bmi",
@@ -183,18 +183,25 @@ The main returned objects are:
 | `pred_points` | Predicted HRs and 95% CIs at user-specified `report_points` |
 | `knots` | Exposure values corresponding to the spline knots |
 | `ref_val` | Exposure value used as the HR = 1 reference |
+| `overall_p` | Numeric p-value for the overall spline association |
+| `overall_p_label` | Formatted p-value for the overall spline association |
 | `nonlinearity_p` | Numeric p-value for the test of non-linearity |
-| `nonlinearity_p_label` | Formatted p-value |
+| `nonlinearity_p_label` | Formatted p-value for the test of non-linearity |
+| `trend_p` | Numeric p-value for the linear trend test |
+| `trend_p_label` | Formatted p-value for the linear trend test |
 | `design_clipped` | Survey design used for model fitting after optional trimming |
 
 Inspect the reference value, knots, non-linearity test, and predictions with:
 
 ```{r}
-res_bmi$ref_val
-res_bmi$knots
+res_bmi$overall_p
+res_bmi$overall_p_label
+
 res_bmi$nonlinearity_p
 res_bmi$nonlinearity_p_label
-head(res_bmi$pred_spline)
+
+res_bmi$trend_p
+res_bmi$trend_p_label
 ```
 
 The prediction data contain the exposure value, estimated HR, and lower and upper 95% confidence limits.
@@ -213,7 +220,7 @@ A smaller p-value provides evidence that the association differs from a linear r
 
 ### Table of results
 
-The predicted hazard ratios (HRs) and 95% confidence intervals at all exposure values along the spline curve can be exported as a results table. The table also includes the Wald p-value for the test of non-linearity.
+The predicted hazard ratios (HRs) and 95% confidence intervals at all exposure values along the spline curve can be exported as a results table. The table also includes p-values for the overall spline association, non-linearity, and linear trend.
 
 ```{r}
 results_table <- res_bmi$pred_spline
@@ -225,7 +232,10 @@ results_table$`HR (95% CI)` <- sprintf(
   results_table$hi
 )
 
-results_table$wald_p_nonlinearity <- res_bmi$nonlinearity_p
+# Add association test p-values
+results_table$p_overall <- res_bmi$overall_p
+results_table$p_nonlinearity <- res_bmi$nonlinearity_p
+results_table$p_trend <- res_bmi$trend_p
 
 # Identify exposure variable
 exposure_var <- names(results_table)[1]
@@ -237,13 +247,15 @@ results_table$reference <- ifelse(
   ""
 )
 
-# Keep exposure, formatted HR (95% CI), reference indicator,
-# and Wald p-value
+# Keep exposure, formatted HR (95% CI), p-values,
+# and reference indicator
 results_table <- results_table[
   , c(
     exposure_var,
     "HR (95% CI)",
-    "wald_p_nonlinearity",
+    "p_overall",
+    "p_nonlinearity",
+    "p_trend",
     "reference"
   )
 ]
