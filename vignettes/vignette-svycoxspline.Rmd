@@ -391,7 +391,7 @@ NHANES_qc_male <- subset(NHANES_qc, sex == "Male")
 
 Because each model is fitted within a single sex stratum, sex is not included as a covariate.
 
-```{r}
+```{r, message=FALSE, results='hide'}
 res_female <- fit_svycoxspline(
   design = NHANES_qc_female,
   exposure_var = "bmi",
