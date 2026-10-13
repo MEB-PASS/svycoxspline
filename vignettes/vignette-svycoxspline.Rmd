@@ -36,16 +36,18 @@ knitr::opts_chunk$set(
 
 The main function, `fit_svycoxspline()`, takes an existing `survey` design object and:
 
--   calculates survey-weighted spline knots and a reference value
--   fits a survey-weighted Cox model with spline terms
--   generates predicted hazard ratios (HRs) and 95% confidence intervals
--   optionally trims the exposure using survey-weighted quantiles
--   fits a corresponding linear Cox model
--   tests for evidence of departure from linearity
+- calculates survey-weighted spline knots and a reference value
+- fits a survey-weighted Cox model with spline terms
+- generates predicted hazard ratios (HRs) and 95% confidence intervals
+- optionally trims the exposure using survey-weighted quantiles
+- fits a corresponding linear Cox model
+- tests the overall spline association
+- tests for evidence of departure from linearity
+- tests for linear trend
 
 The basic workflow is:
 
-``` text
+```text
 Create survey design
        ↓
 Apply analytic restrictions
@@ -59,7 +61,7 @@ Visualize the association
 
 This vignette uses BMI and all-cause mortality in NHANES 2011-2014.
 
-Other complex surveys may use different sampling designs and design variables. Users should construct the survey design object using the appropriate specification for their data before passing it to fit_svycoxspline().
+Other complex surveys may use different sampling designs and design variables. Users should construct the survey design object using the appropriate specification for their data before passing it to `fit_svycoxspline()`.
 
 # Load packages
 
@@ -142,7 +144,7 @@ res_bmi <- fit_svycoxspline(
 The main arguments are:
 
 | Argument | Purpose | Default | Example |
-|:--------------|:--------------------------|:--------------|:--------------|
+|:---|:---|:---|:---|
 | `trim_probs` | Lower and upper survey-weighted quantiles defining the exposure range used for modeling | `c(0.01, 0.99)` | `c(0.01, 0.99)` or `NULL` |
 | `knot_probs` | Survey-weighted quantiles used to place spline knots and define the boundary knots | `c(0.05, 0.50, 0.95)` | `c(0.05, 0.50, 0.95)` |
 | `ref_prob` | Survey-weighted quantile defining the HR = 1 reference value | `0.10` | `0.10` |
@@ -158,15 +160,15 @@ The main arguments are:
 
 `ref_prob` defines the exposure percentile used as the HR = 1 reference. For example, `ref_prob = 0.10` uses the survey-weighted 10th percentile as the reference.
 
-`report_points` specifies exposure values at which HRs and 95% CIs are returned; for example, `report_points = c(25, 30)` returns estimates at BMI values of 20 and 30 kg/m².
+`report_points` specifies exposure values at which HRs and 95% CIs are returned. For example, `report_points = c(25, 30)` returns estimates at BMI values of 25 and 30 kg/m².
 
-`grid_by` controls the spacing of exposure values used for predictions/
+`grid_by` controls the spacing of exposure values used for predictions.
 
 `round_to` controls the increment used to round the reference value and the lower and upper limits of the prediction grid. The default is `round_to = 1`, which rounds these values to the nearest whole unit. For exposures where smaller increments are meaningful, users can specify a smaller value. For example, `round_to = 0.1` rounds to the nearest 0.1 units, while `round_to = 10` rounds to the nearest 10 units. Choose a value that is appropriate for the scale and interpretation of the exposure.
 
 # Examine the results
 
-The fitted object contains the model fits, predictions, spline knots, reference value, and test for non-linearity.
+The fitted object contains the model fits, predictions, spline knots, reference value, and association tests.
 
 ```{r}
 names(res_bmi)
@@ -175,9 +177,10 @@ names(res_bmi)
 The main returned objects are:
 
 | Returned object | Description |
-|:-----------------------------------|:-----------------------------------|
-| `fit_spline` | Survey-weighted Cox model containing spline terms |
+|:---|:---|
+| `fit_spline` | Survey-weighted Cox model containing natural spline terms |
 | `fit_linear` | Corresponding survey-weighted Cox model with a linear exposure term |
+| `fit_nonlinearity` | Equivalent reparameterization of the spline model used for the test of non-linearity |
 | `pred_spline` | Predicted HRs and 95% CIs from the spline model |
 | `pred_linear` | Predicted HRs and 95% CIs from the linear model |
 | `pred_points` | Predicted HRs and 95% CIs at user-specified `report_points` |
@@ -185,15 +188,27 @@ The main returned objects are:
 | `ref_val` | Exposure value used as the HR = 1 reference |
 | `overall_p` | Numeric p-value for the overall spline association |
 | `overall_p_label` | Formatted p-value for the overall spline association |
-| `nonlinearity_p` | Numeric p-value for the test of non-linearity |
+| `nonlinearity_p` | Numeric p-value for the Wald test of departure from linearity |
 | `nonlinearity_p_label` | Formatted p-value for the test of non-linearity |
+| `nonlinear_terms` | Spline terms jointly tested for departure from linearity |
 | `trend_p` | Numeric p-value for the linear trend test |
 | `trend_p_label` | Formatted p-value for the linear trend test |
 | `design_clipped` | Survey design used for model fitting after optional trimming |
 
-Inspect the reference value, knots, non-linearity test, and predictions with:
+The fitted object also contains internal diagnostics used to verify the spline reparameterization:
+
+- `x_reconstruction_error`
+- `spline_space_error`
+- `reparameterization_lp_difference`
+
+These values should be approximately zero when the reparameterization successfully reproduces the original natural spline model.
+
+Inspect the reference value, knots, association tests, and predictions with:
 
 ```{r}
+res_bmi$knots
+res_bmi$ref_val
+
 res_bmi$overall_p
 res_bmi$overall_p_label
 
@@ -202,7 +217,15 @@ res_bmi$nonlinearity_p_label
 
 res_bmi$trend_p
 res_bmi$trend_p_label
+
+head(res_bmi$pred_spline)
 ```
+
+The three association tests answer different questions:
+
+- `overall_p` tests whether the spline terms are jointly associated with the outcome.
+- `nonlinearity_p` tests whether the spline association departs from linearity.
+- `trend_p` tests the continuous exposure term in the corresponding linear Cox model.
 
 The prediction data contain the exposure value, estimated HR, and lower and upper 95% confidence limits.
 
@@ -214,9 +237,11 @@ res_bmi$pred_points[, c("bmi", "HR", "lo", "hi")]
 
 ## Interpreting the test for non-linearity
 
-`fit_svycoxspline()` provides a p-value from a Wald test of the spline terms used to represent departure from linearity.
+`fit_svycoxspline()` assesses departure from linearity using a Wald test. The fitted natural spline is reparameterized so that the exposure is included explicitly as the linear component, with the remaining spline terms representing departures from linearity. The reparameterization spans the same natural spline space as the model used to estimate the exposure-response curve.
 
-A smaller p-value provides evidence that the association differs from a linear relationship. A larger p-value indicates insufficient evidence to reject linearity. Interpret this test alongside the estimated curve, confidence intervals, exposure distribution, and model assumptions rather than in isolation.
+A joint Wald test of the nonlinear terms is then used to test the null hypothesis that the exposure-response association is linear.
+
+A smaller p-value provides evidence that the association departs from a linear relationship. A larger p-value indicates insufficient evidence to reject linearity. The test should be interpreted alongside the estimated curve, confidence intervals, exposure distribution, and model assumptions rather than in isolation.
 
 ### Table of results
 
@@ -272,18 +297,25 @@ ggplot(res_bmi$pred_spline, aes(x = bmi, y = HR)) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
-  geom_vline(data = res_bmi$pred_points,
-             aes(xintercept = bmi),
-             linetype = "dotted") +
-  geom_point(data = res_bmi$pred_points,
-             aes(x = bmi, y = HR),
-             size = 3) +
+  geom_vline(
+    data = res_bmi$pred_points,
+    aes(xintercept = bmi),
+    linetype = "dotted"
+  ) +
+  geom_point(
+    data = res_bmi$pred_points,
+    aes(x = bmi, y = HR),
+    size = 3
+  ) +
   geom_label(
     data = res_bmi$pred_points,
     aes(
       x = bmi,
       y = HR,
-      label = sprintf("BMI = %.0f\n%.2f (%.2f, %.2f)", bmi, HR, lo, hi)
+      label = sprintf(
+        "BMI = %.0f\n%.2f (%.2f, %.2f)",
+        bmi, HR, lo, hi
+      )
     ),
     nudge_y = 0.20,
     size = 2.5
@@ -427,15 +459,20 @@ results_table_sex$wald_p_nonlinearity <- ifelse(
 exposure_var <- names(results_table_sex)[1]
 
 results_table_sex <- results_table_sex[
-  , c(exposure_var, "sex", "HR (95% CI)", "wald_p_nonlinearity")
+  , c(
+    exposure_var,
+    "sex",
+    "HR (95% CI)",
+    "wald_p_nonlinearity"
+  )
 ]
 
-# specify reference row
+# Specify reference row
 results_table_sex$reference <- ifelse(
   (results_table_sex$sex == "Female" &
      results_table_sex[[exposure_var]] == res_female$ref_val) |
-  (results_table_sex$sex == "Male" &
-     results_table_sex[[exposure_var]] == res_male$ref_val),
+    (results_table_sex$sex == "Male" &
+       results_table_sex[[exposure_var]] == res_male$ref_val),
   "Reference",
   ""
 )
@@ -450,17 +487,26 @@ Subgroup predictions can be plotted.
 Note that exposure quantiles are calculated separately within each subgroup, so knot locations and reference values may differ between subgroups.
 
 ```{r}
-ggplot(pred_combined,
-       aes(
-         x = bmi,
-         y = HR,
-         colour = sex,
-         fill = sex,
-         linetype = sex
-       )) +
-  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, colour = NA) +
+ggplot(
+  pred_combined,
+  aes(
+    x = bmi,
+    y = HR,
+    colour = sex,
+    fill = sex,
+    linetype = sex
+  )
+) +
+  geom_ribbon(
+    aes(ymin = lo, ymax = hi),
+    alpha = 0.2,
+    colour = NA
+  ) +
   geom_line(linewidth = 1) +
-  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed"
+  ) +
   geom_vline(
     data = points_combined,
     aes(xintercept = bmi),
@@ -479,7 +525,10 @@ ggplot(pred_combined,
       x = bmi,
       y = HR,
       colour = sex,
-      label = sprintf("BMI = %.0f\n%.2f (%.2f, %.2f)", bmi, HR, lo, hi)
+      label = sprintf(
+        "BMI = %.0f\n%.2f (%.2f, %.2f)",
+        bmi, HR, lo, hi
+      )
     ),
     inherit.aes = FALSE,
     nudge_y = -0.18,
@@ -492,7 +541,10 @@ ggplot(pred_combined,
       x = bmi,
       y = HR,
       colour = sex,
-      label = sprintf("BMI = %.0f\n%.2f (%.2f, %.2f)", bmi, HR, lo, hi)
+      label = sprintf(
+        "BMI = %.0f\n%.2f (%.2f, %.2f)",
+        bmi, HR, lo, hi
+      )
     ),
     inherit.aes = FALSE,
     nudge_y = 0.18,

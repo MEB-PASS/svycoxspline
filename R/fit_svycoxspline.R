@@ -67,7 +67,6 @@ fit_svycoxspline <- function(design,
 
   if (is.null(trim_probs)) {
 
-    # No trimming
     lo_b <- min(
       design$variables[[exposure_var]],
       na.rm = TRUE
@@ -91,8 +90,7 @@ fit_svycoxspline <- function(design,
     lo_b <- as.numeric(bounds[[1]][1])
     hi_b <- as.numeric(bounds[[1]][2])
 
-    # Subset the existing survey design rather than recreating it.
-    # This preserves the survey design structure and weights.
+    # Subset existing survey design so survey structure is retained
     design <- subset(
       design,
       get(exposure_var) >= lo_b &
@@ -100,7 +98,7 @@ fit_svycoxspline <- function(design,
     )
   }
 
-  # Check report points against the modeled exposure range
+  # Check reporting points
   if (!is.null(report_points)) {
 
     if (any(report_points < lo_b | report_points > hi_b)) {
@@ -114,7 +112,7 @@ fit_svycoxspline <- function(design,
     }
   }
 
-  # Number of participants and outcome events after trimming
+  # Sample size and events
   n_used <- nrow(design$variables)
 
   n_events <- sum(
@@ -123,7 +121,7 @@ fit_svycoxspline <- function(design,
   )
 
   # ------------------------------------------------------------
-  # 2. Calculate spline knots and reference value
+  # 2. Calculate survey-weighted knots and reference value
   # ------------------------------------------------------------
 
   knots <- as.numeric(
@@ -136,7 +134,6 @@ fit_svycoxspline <- function(design,
     )[[1]]
   )
 
-  # Check for duplicate knots
   if (anyDuplicated(knots)) {
     stop(
       "Spline knots are not unique. ",
@@ -157,7 +154,7 @@ fit_svycoxspline <- function(design,
   ref_val <- round(ref_raw / round_to) * round_to
 
   # ------------------------------------------------------------
-  # 3. Build spline basis and add to survey design
+  # 3. Build natural spline basis
   # ------------------------------------------------------------
 
   x <- design$variables[[exposure_var]]
@@ -170,9 +167,14 @@ fit_svycoxspline <- function(design,
 
   nc <- ncol(X_ns)
 
-  colnames(X_ns) <- paste0("s", seq_len(nc))
+  colnames(X_ns) <- paste0(
+    "s",
+    seq_len(nc)
+  )
 
-  update_args <- as.list(as.data.frame(X_ns))
+  update_args <- as.list(
+    as.data.frame(X_ns)
+  )
 
   names(update_args) <- colnames(X_ns)
 
@@ -182,7 +184,7 @@ fit_svycoxspline <- function(design,
   )
 
   # ------------------------------------------------------------
-  # 4. Fit spline Cox model
+  # 4. Fit survey-weighted spline Cox model
   # ------------------------------------------------------------
 
   spline_terms <- paste0(
@@ -266,7 +268,6 @@ fit_svycoxspline <- function(design,
     ref_val
   )))
 
-  # Spline basis for prediction grid
   X_grid <- as.matrix(
     splines::ns(
       grid,
@@ -275,7 +276,6 @@ fit_svycoxspline <- function(design,
     )
   )
 
-  # Spline basis for reference value
   X_ref <- as.numeric(
     splines::ns(
       ref_val,
@@ -284,7 +284,7 @@ fit_svycoxspline <- function(design,
     )
   )
 
-  # Contrast each grid value against reference
+  # Contrasts relative to reference
   L <- t(X_grid) -
     matrix(
       X_ref,
@@ -292,7 +292,6 @@ fit_svycoxspline <- function(design,
       ncol = nrow(X_grid)
     )
 
-  # Spline coefficients and covariance matrix
   spline_names <- paste0(
     "s",
     seq_len(nc)
@@ -306,16 +305,17 @@ fit_svycoxspline <- function(design,
     drop = FALSE
   ]
 
-  # Log HR and standard error
   lnHR <- as.numeric(
     t(L) %*% b
   )
 
   SE <- sqrt(
-    diag(t(L) %*% V %*% L)
+    pmax(
+      0,
+      diag(t(L) %*% V %*% L)
+    )
   )
 
-  # Prediction data frame
   pred_df <- data.frame(
     x = grid,
     lnHR = lnHR,
@@ -350,7 +350,6 @@ fit_svycoxspline <- function(design,
       )
     )
 
-    # Contrast each reporting point against reference
     L_points <- t(X_points) -
       matrix(
         X_ref,
@@ -358,18 +357,19 @@ fit_svycoxspline <- function(design,
         ncol = length(report_points)
       )
 
-    # Log HR and standard error
     lnHR_points <- as.numeric(
       t(L_points) %*% b
     )
 
     SE_points <- sqrt(
-      diag(
-        t(L_points) %*% V %*% L_points
+      pmax(
+        0,
+        diag(
+          t(L_points) %*% V %*% L_points
+        )
       )
     )
 
-    # Reporting point results
     pred_points <- data.frame(
       x = report_points,
       lnHR = lnHR_points,
@@ -475,39 +475,264 @@ fit_svycoxspline <- function(design,
   names(pred_linear)[1] <- exposure_var
 
   # ------------------------------------------------------------
-  # 7. Test for non-linearity
+  # 7. Formal test for departure from linearity
   # ------------------------------------------------------------
+  #
+  # Reparameterize the SAME natural spline space so that the
+  # original exposure x is explicitly included as the linear
+  # component.
+  #
+  # The remaining basis terms then represent departures from
+  # linearity.
+  #
+  # This avoids assuming that s1 from splines::ns() is itself
+  # the linear exposure term.
 
-  # Test whether the non-linear spline terms are jointly zero.
   if (nc > 1) {
 
-    nonlin_terms <- paste0(
-      "s",
-      2:nc,
-      collapse = " + "
+    B <- as.matrix(X_ns)
+
+    # ----------------------------------------------------------
+    # 7a. Confirm that x belongs to the natural spline space
+    # ----------------------------------------------------------
+
+    basis_fit <- lm.fit(
+      x = cbind(Intercept = 1, B),
+      y = x
     )
+
+    x_reconstructed <- as.numeric(
+      cbind(Intercept = 1, B) %*%
+        basis_fit$coefficients
+    )
+
+    x_reconstruction_error <- max(
+      abs(x - x_reconstructed),
+      na.rm = TRUE
+    )
+
+    if (!is.finite(x_reconstruction_error) ||
+        x_reconstruction_error > 1e-7) {
+
+      stop(
+        "The linear exposure could not be reconstructed from ",
+        "the natural spline space. Non-linearity test aborted."
+      )
+    }
+
+    # ----------------------------------------------------------
+    # 7b. Replace one spline basis column with x
+    # ----------------------------------------------------------
+
+    basis_coef <- basis_fit$coefficients[-1]
+
+    drop_col <- which.max(
+      abs(basis_coef)
+    )
+
+    keep_cols <- setdiff(
+      seq_len(nc),
+      drop_col
+    )
+
+    X_nonlin <- B[
+      ,
+      keep_cols,
+      drop = FALSE
+    ]
+
+    colnames(X_nonlin) <- paste0(
+      "nl",
+      seq_len(ncol(X_nonlin))
+    )
+
+    # ----------------------------------------------------------
+    # 7c. Verify that the reparameterized basis spans exactly
+    #     the same space as the original natural spline
+    # ----------------------------------------------------------
+
+    X_old <- cbind(
+      Intercept = 1,
+      B
+    )
+
+    X_new <- cbind(
+      Intercept = 1,
+      exposure = x,
+      X_nonlin
+    )
+
+    reconstruction <- qr.resid(
+      qr(X_new),
+      X_old
+    )
+
+    spline_space_error <- max(
+      abs(reconstruction),
+      na.rm = TRUE
+    )
+
+    if (!is.finite(spline_space_error) ||
+        spline_space_error > 1e-7) {
+
+      stop(
+        "Reparameterized spline basis does not reproduce ",
+        "the original natural spline space. ",
+        "Non-linearity test aborted."
+      )
+    }
+
+    # ----------------------------------------------------------
+    # 7d. Add nonlinear terms to survey design
+    # ----------------------------------------------------------
+
+    update_nonlin <- as.list(
+      as.data.frame(X_nonlin)
+    )
+
+    names(update_nonlin) <- colnames(X_nonlin)
+
+    design_nonlin <- do.call(
+      stats::update,
+      c(list(design), update_nonlin)
+    )
+
+    nonlinear_terms <- colnames(
+      X_nonlin
+    )
+
+    # ----------------------------------------------------------
+    # 7e. Fit equivalent reparameterized survey-weighted model
+    # ----------------------------------------------------------
+
+    if (length(covariates) == 0) {
+
+      form_nonlin <- as.formula(
+        paste0(
+          "survival::Surv(",
+          time_var,
+          ", ",
+          event_var,
+          " == TRUE) ~ ",
+          exposure_var,
+          " + ",
+          paste(
+            nonlinear_terms,
+            collapse = " + "
+          )
+        )
+      )
+
+    } else {
+
+      form_nonlin <- as.formula(
+        paste0(
+          "survival::Surv(",
+          time_var,
+          ", ",
+          event_var,
+          " == TRUE) ~ ",
+          exposure_var,
+          " + ",
+          paste(
+            nonlinear_terms,
+            collapse = " + "
+          ),
+          " + ",
+          covariate_terms
+        )
+      )
+    }
+
+    fit_nonlin <- survey::svycoxph(
+      form_nonlin,
+      design = design_nonlin
+    )
+
+    # ----------------------------------------------------------
+    # 7f. Verify fitted model equivalence
+    # ----------------------------------------------------------
+
+    lp_original <- as.numeric(
+      predict(
+        fit_spline,
+        type = "lp"
+      )
+    )
+
+    lp_reparam <- as.numeric(
+      predict(
+        fit_nonlin,
+        type = "lp"
+      )
+    )
+
+    # Cox linear predictors can differ by an arbitrary constant,
+    # so center both before comparing.
+    lp_original_centered <-
+      lp_original -
+      mean(lp_original, na.rm = TRUE)
+
+    lp_reparam_centered <-
+      lp_reparam -
+      mean(lp_reparam, na.rm = TRUE)
+
+    max_lp_difference <- max(
+      abs(
+        lp_original_centered -
+          lp_reparam_centered
+      ),
+      na.rm = TRUE
+    )
+
+    if (!is.finite(max_lp_difference) ||
+        max_lp_difference > 1e-6) {
+
+      stop(
+        "Original and reparameterized spline models do not ",
+        "produce equivalent linear predictors. ",
+        "Non-linearity test aborted."
+      )
+    }
+
+    # ----------------------------------------------------------
+    # 7g. Joint Wald test of nonlinear component(s)
+    # ----------------------------------------------------------
 
     nonlinearity_p <- tryCatch({
 
-      p <- survey::regTermTest(
-        fit_spline,
+      test_result <- survey::regTermTest(
+        fit_nonlin,
         as.formula(
-          paste("~", nonlin_terms)
+          paste(
+            "~",
+            paste(
+              nonlinear_terms,
+              collapse = " + "
+            )
+          )
         )
-      )$p
+      )
 
-      if (is.null(p)) {
+      if (is.null(test_result$p)) {
         NA_real_
       } else {
-        as.numeric(p)
+        as.numeric(test_result$p)
       }
 
     }, error = function(e) {
+
       NA_real_
+
     })
 
   } else {
 
+    fit_nonlin <- NULL
+    nonlinear_terms <- character(0)
+    x_reconstruction_error <- NA_real_
+    spline_space_error <- NA_real_
+    max_lp_difference <- NA_real_
     nonlinearity_p <- NA_real_
   }
 
@@ -587,7 +812,19 @@ fit_svycoxspline <- function(design,
     "P for linear trend = ",
     trend_p_label,
     "\n",
-    interpretation
+    interpretation,
+    if (nc > 1) {
+      paste0(
+        "\nMaximum LP difference after reparameterization = ",
+        format(
+          max_lp_difference,
+          scientific = TRUE,
+          digits = 3
+        )
+      )
+    } else {
+      ""
+    }
   )
 
   # ------------------------------------------------------------
@@ -597,17 +834,32 @@ fit_svycoxspline <- function(design,
   list(
     fit_spline = fit_spline,
     fit_linear = fit_lin,
+
+    # Reparameterized version of same spline model
+    fit_nonlinearity = fit_nonlin,
+
     pred_spline = pred_df,
     pred_linear = pred_linear,
     pred_points = pred_points,
+
     knots = knots,
     ref_val = ref_val,
+
     overall_p = overall_p,
     overall_p_label = overall_p_label,
+
     nonlinearity_p = nonlinearity_p,
     nonlinearity_p_label = nonlinearity_p_label,
+    nonlinear_terms = nonlinear_terms,
+
     trend_p = trend_p,
     trend_p_label = trend_p_label,
+
+    # Diagnostics confirming equivalent parameterization
+    x_reconstruction_error = x_reconstruction_error,
+    spline_space_error = spline_space_error,
+    reparameterization_lp_difference = max_lp_difference,
+
     design_clipped = design
   )
 }
