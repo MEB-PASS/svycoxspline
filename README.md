@@ -94,6 +94,8 @@ res <- fit_svycoxspline(
 )
 ```
 
+When exposure trimming is applied, the spline knots are placed within the trimmed exposure range.
+
 For example, to specify trimming, knots, and exposure values of interest:
 
 ```r
