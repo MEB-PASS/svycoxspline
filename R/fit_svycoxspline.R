@@ -1,4 +1,30 @@
-#' Fit a survey-weighted Cox proportional hazards model with natural cubic splines
+#' Fit a Survey-Weighted Cox Model with Natural Cubic Splines
+#'
+#' @description
+#' Fits survey-weighted Cox proportional hazards models using
+#' natural cubic splines to evaluate potentially nonlinear
+#' associations between a continuous exposure and a
+#' time-to-event outcome.
+#'
+#' @details
+#' Spline knots and the reference value are calculated using
+#' survey-weighted quantiles.
+#'
+#' The function fits both spline and linear Cox models,
+#' generates hazard ratio predictions relative to the
+#' reference value, and performs Wald tests for overall
+#' association and departure from linearity.
+#'
+#' @param design A survey design object created using
+#'   the survey package.
+#' @param exposure_var Character string naming the
+#'   continuous exposure variable.
+#' @param time_var Character string naming the
+#'   follow-up time variable.
+#' @param event_var Character string naming the
+#'   event indicator.
+#' @param covariates Character vector of adjustment
+#'   covariate names. Use character(0) for no adjustment.
 #'
 #' @export
 fit_svycoxspline <- function(design,
