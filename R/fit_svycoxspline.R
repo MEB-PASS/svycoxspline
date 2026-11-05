@@ -25,6 +25,26 @@
 #'   event indicator.
 #' @param covariates Character vector of adjustment
 #'   covariate names. Use character(0) for no adjustment.
+#' @param trim_probs Numeric vector of two probabilities defining
+#'   the lower and upper exposure limits for trimming.
+#'   Defaults to c(0.01, 0.99). Set to NULL to disable trimming.
+#' @param knot_probs Numeric vector of probabilities used to
+#'   calculate survey-weighted spline knots.
+#'   Defaults to c(0.05, 0.50, 0.95).
+#' @param ref_prob Numeric probability used to calculate the
+#'   survey-weighted reference value. Defaults to 0.10.
+#' @param grid_by Numeric increment between prediction grid
+#'   values. Defaults to 1.
+#' @param round_to Numeric increment used to round the reference
+#'   value and prediction grid boundaries. Defaults to 1.
+#' @param report_points Optional numeric vector of exposure
+#'   values at which to report hazard ratios.
+#'   Defaults to NULL.
+#'
+#' @return A list containing fitted Cox models, spline and
+#'   linear hazard ratio predictions, optional predictions at
+#'   specified reporting points, spline knots, the reference
+#'   value, p-values, and model diagnostics.
 #'
 #' @export
 fit_svycoxspline <- function(design,
