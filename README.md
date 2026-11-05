@@ -189,4 +189,4 @@ Please report comments, suggestions, errors, and bugs through the GitHub Issues 
 
 ## Acknowledgements
 
-Special thanks to Hayden Hayes, Sang Kyu Lee, and Barry Graubard for their contributions to the development and testing of this package.
+Special thanks to Hayden Hayes, Sang Kyu Lee, Barry Graubard, and Grace Hong for their contributions to the development and testing of this package.
