@@ -33,6 +33,33 @@ event indicator.}
 
 \item{covariates}{Character vector of adjustment
 covariate names. Use character(0) for no adjustment.}
+
+\item{trim_probs}{Numeric vector of two probabilities defining
+the lower and upper exposure limits for trimming.
+Defaults to c(0.01, 0.99). Set to NULL to disable trimming.}
+
+\item{knot_probs}{Numeric vector of probabilities used to
+calculate survey-weighted spline knots.
+Defaults to c(0.05, 0.50, 0.95).}
+
+\item{ref_prob}{Numeric probability used to calculate the
+survey-weighted reference value. Defaults to 0.10.}
+
+\item{grid_by}{Numeric increment between prediction grid
+values. Defaults to 1.}
+
+\item{round_to}{Numeric increment used to round the reference
+value and prediction grid boundaries. Defaults to 1.}
+
+\item{report_points}{Optional numeric vector of exposure
+values at which to report hazard ratios.
+Defaults to NULL.}
+}
+\value{
+A list containing fitted Cox models, spline and
+  linear hazard ratio predictions, optional predictions at
+  specified reporting points, spline knots, the reference
+  value, p-values, and model diagnostics.
 }
 \description{
 Fits survey-weighted Cox proportional hazards models using
