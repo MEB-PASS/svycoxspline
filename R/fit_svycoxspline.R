@@ -40,11 +40,13 @@
 #' @param report_points Optional numeric vector of exposure
 #'   values at which to report hazard ratios.
 #'   Defaults to NULL.
-#'
 #' @return A list containing fitted Cox models, spline and
 #'   linear hazard ratio predictions, optional predictions at
 #'   specified reporting points, spline knots, the reference
 #'   value, p-values, and model diagnostics.
+#'
+#' @importFrom stats as.formula coef vcov lm.fit predict
+#' @importFrom survival Surv
 #'
 #' @export
 fit_svycoxspline <- function(design,
