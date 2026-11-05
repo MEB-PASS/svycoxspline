@@ -2,7 +2,7 @@ Package: svycoxspline
 Type: Package
 Title: Survey-Weighted Cox Proportional Hazards Models with Restricted Cubic Splines
 Version: 0.1.0
-Authors@R: 
+Authors@R:
     person(
       "Alaina",
       "Shreves",
@@ -13,17 +13,18 @@ Description: Provides functions for fitting and visualizing spline models
     for survival outcomes in complex survey data. Includes tools for
     selecting survey-weighted knots and reference values, estimating
     hazard ratios and confidence intervals, and testing for nonlinearity.
-License: MIT + file LICENSE
+License: file LICENSE
 Encoding: UTF-8
 Imports:
-    dplyr,
     splines,
     survival,
-    survey,
-    tibble
+    survey
 Suggests:
+    data.table,
+    dplyr,
     ggplot2,
     knitr,
-    rmarkdown
+    rmarkdown,
+    tibble
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
